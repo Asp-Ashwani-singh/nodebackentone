@@ -61,4 +61,60 @@ res.status(201).json(
     
 })
 
+const loginUser=asyncHandler(async (req,res)=>{
+    const {email,username,password}=req.body
+
+    if (!email || !username){
+        throw new ApiError(400,'Username or email must be filled')
+    }
+    const user=await User.find({
+        $or:[{username},{email}]
+    })
+    if(!user){
+        throw new ApiError(400,'User may not exists')
+    }
+
+   const isPasswordValid= await user.isPasswordCorrect(password)
+   if(!isPasswordValid){
+    throw new ApiError(401,'Invalid User Credentials')
+   }
+   const {accessToken,refreshToken}=await generateAccessAndRefreshToken(user._id)
+   
+   const loggedInUser=User.findById(user._id).select("-password -refreshToken")
+
+   const options={
+    httpOnly:true,
+    secure:true
+   }
+
+   return res.
+   status(200).
+   cookie("accessToken",accessToken,options).
+   cookie("refreshToken",refreshToken,options).
+   json(
+    new ApiResponse(200,{
+        user:loggedInUser,refreshToken,accessToken,
+    },
+        "User LoggedIn SccessFully"
+    )
+   )
+})
+const generateAccessAndRefreshToken=async (userId)=>{
+try {
+    const user=User.findById(userId)
+    const accessToken=user.generateAccessToken()
+    const refreshToken=user.generateRefereshToken()
+
+    user.refreshToken=refreshToken
+    user.save({validateBeforeSave:false})
+    return {accessToken,refreshToken}
+    
+} catch (error) {
+    
+}
+
+}
+
+
+
 export {registerUser}
