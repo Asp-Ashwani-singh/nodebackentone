@@ -1,9 +1,12 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {ApiError} from '../utils/ApiError.js'
-import {User} from '../models/user.model.js'
+import { User} from '../models/user.model.js'
 import {uploadOnCludinary} from '../utils/Cloudinary.js'
 import { ApiResponse } from "../utils/ApiResponse.js";
+import {API_MESSAGE} from '../constants.js'
+import jwt from "jsonwebtoken";
 
+//register user
 const registerUser=asyncHandler(async(req,res)=>{
     //get details from frontend
     //validattion
@@ -57,31 +60,31 @@ if(!createUser){
 res.status(201).json(
     new ApiResponse(200,createUser,"registered user scuccesfully")
 )
-   
-    
 })
-
+//login user 
 const loginUser=asyncHandler(async (req,res)=>{
     const {email,username,password}=req.body
+ 
 
-    if (!email || !username){
-        throw new ApiError(400,'Username or email must be filled')
+    if (!email && !username){
+         res.status(400).json(new ApiResponse(400,{},"Username or email must be filled"))
     }
-    const user=await User.find({
-        $or:[{username},{email}]
-    })
-    if(!user){
-        throw new ApiError(400,'User may not exists')
+    const user=await User.findOne({ $or:[{username},{email}] })
+    
+
+    if(!user || user.length===0){
+        res.status(400).json(new ApiResponse(400,{},"User may not exists"))
     }
 
-   const isPasswordValid= await user.isPasswordCorrect(password)
+   const isPasswordValid= await  user.isPasswordCorrect(password);
+ 
    if(!isPasswordValid){
-    throw new ApiError(401,'Invalid User Credentials')
+    res.status(401).json(new ApiResponse(401,{},"Invalid User Credentials"))
    }
    const {accessToken,refreshToken}=await generateAccessAndRefreshToken(user._id)
+    
    
-   const loggedInUser=User.findById(user._id).select("-password -refreshToken")
-
+   const loggedInUser=await User.findById(user._id).select("-password -refreshToken -__v")
    const options={
     httpOnly:true,
     secure:true
@@ -99,7 +102,7 @@ const loginUser=asyncHandler(async (req,res)=>{
     )
    )
 })
-
+//logout user
 const logoutUser=asyncHandler(async (req,res)=>{
 User.findByIdAndUpdate(
     req.user._id,{
@@ -122,23 +125,63 @@ const options={
    .json(new ApiResponse(200,{},'User Logout SuccessFully'))
 
 })
+//refreshToken
+const refreshAccessToken=asyncHandler(async(req,res)=>{
+    const incomingRefreshToken=req.cookies.refreshToken || req.body.refreshToken
+    console.log('refresh token',incomingRefreshToken)
 
-const generateAccessAndRefreshToken=async (userId)=>{
+    if(!incomingRefreshToken){
+        res.status(401).json(new ApiResponse(401,{},"Invalid Refresh Token"))
+    }
+
+
+const decodedAccesToken=await jwt.verify(incomingRefreshToken,process.env.REFESH_TOKEN_SECRET)
+console.log('decodedAccesToken from resfreshAccessToken',decodedAccesToken)
+
+const user=await User.findById(decodedAccesToken._id)
+if(!user){
+    res.status(401).json(new ApiResponse(401,{},"Unauthorized Request!"))
+}
+
+if (user?.refreshToken!==incomingRefreshToken){
+    res.status(401).json(new ApiResponse(401,{},"RefreshToken is Expaired or used!"))
+}
+
+const options={
+    httpOnly:true,
+    secure:true
+    }
+
+    const {accessToken,refreshToken}=await generateAccessAndRefreshToken(user._id)
+
+    console.log('after generation new refreshtoken',refreshToken)
+
+
+    res.status(200)
+    .cookie("accessToken",accessToken,options)
+    .cookie("refreshToken",refreshToken,options)
+    .json(
+        new ApiResponse(200,{id:user?._id,refreshToken,accessToken},
+         API_MESSAGE.REFRESH_ACCESS_TOKEN
+        )
+    )
+})
+
+//generate access and refresh token
+const generateAccessAndRefreshToken=async (userId)=>{   
 try {
-    const user=User.findById(userId)
-    const accessToken=user.generateAccessToken()
-    const refreshToken=user.generateRefereshToken()
-
+    const user=await User.findById({_id:userId})
+    const accessToken=await user.generateAccessToken()
+    const refreshToken=await user.generateRefereshToken()
     user.refreshToken=refreshToken
     user.save({validateBeforeSave:false})
     return {accessToken,refreshToken}
-    
 } catch (error) {
-    
+    console.log('error generte in generateAccessAndRefreshToken',error)
 }
 
 }
 
 
 
-export {registerUser,loginUser,logoutUser}
+export {registerUser,loginUser,logoutUser,refreshAccessToken}

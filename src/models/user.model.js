@@ -51,10 +51,12 @@ userSchema.pre("save", async function (next) {
 });
 
 userSchema.methods.isPasswordCorrect = async function (password) {
-  return await bcrypt.compare(password, this.password);
+  const isMatched=await bcrypt.compare(password, this.password);
+  return  isMatched
 };
 
 userSchema.methods.generateAccessToken = async function () {
+  console.log('generateAccessToken')
   return await jwt.sign(
     {
       _id: this._id,
@@ -67,6 +69,7 @@ userSchema.methods.generateAccessToken = async function () {
   );
 };
 userSchema.methods.generateRefereshToken = async function () {
+  console.log('generateRefereshToken')
   return await jwt.sign(
     {
       _id: this._id,
