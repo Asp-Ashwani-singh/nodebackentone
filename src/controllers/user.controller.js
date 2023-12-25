@@ -166,6 +166,73 @@ const options={
         )
     )
 })
+//change password
+const changeCurrentPassword=asyncHandler(async (req,res)=>{
+    const {oldPassword,newPassword,confirmPassword}=req.body
+    console.log("data from user",req?.user)
+    const ss=typeof newPassword
+    console.log(ss=="string")
+
+    if(newPassword!==confirmPassword){
+        res.status(400).json(new ApiResponse(400,{},"Password and confirm password must same"))
+    }
+    const user=await User.findById(req?.user?._id)
+    if(!user){
+        res.status(401).json(new ApiResponse(401,{},"Unauthrized Request"))
+    }
+    const isPasswordCorrect=await user.isPasswordCorrect(oldPassword)
+    if(!isPasswordCorrect){
+        res.status(400).json(new ApiResponse(400,{},"UserName or Passwor may wrong"))
+    }
+    user.password=newPassword
+    await user.save({validateBeforeSave:false})
+
+    res.json(
+        new ApiResponse(200,{},"Password Successfully Changed!")
+    )
+})
+
+//get current user
+
+const getCurrentUser=asyncHandler(async(req,res)=>{
+    res.json(
+        new ApiResponse(200,req?.user,"Password Successfully Changed!")
+    )
+})
+//update user details
+const updateUserDetails=asyncHandler(async(req,res)=>{
+    const {fullname,email}=req.body
+    if(!fullname || !email){
+        res.json(
+            new ApiResponse(200,{},"All fields required!")
+        ) 
+    }
+
+    const user=await User.findByIdAndUpdate(req.user?._id
+        ,
+        {$set:{fullname:fullname,email:email}
+            },
+        {new:true}
+        ).select("-password")
+
+        res.json(
+            new ApiResponse(200,user,"User Successfully Updated")
+        )
+})
+
+const updateAvatar=asyncHandler(async(req,res)=>{
+    const avatarLocalPath=req.file?.path
+    if(!avatarLocalPath){
+        res.json(new ApiResponse(400,{},'Avatar file missing'))
+    }
+    const avatar=await uploadOnCludinary(avatarLocalPath)
+    if(!avatar.url){
+        res.json(new ApiResponse(400,{},'While uploading avatar on c..'))
+    }
+
+    const user=User.findByIdAndUpdate(req.user._id,{$set:{avatar:avatar.url}},{new:true}).select("-password")
+
+})
 
 //generate access and refresh token
 const generateAccessAndRefreshToken=async (userId)=>{   
@@ -184,4 +251,4 @@ try {
 
 
 
-export {registerUser,loginUser,logoutUser,refreshAccessToken}
+export {registerUser,loginUser,logoutUser,refreshAccessToken,changeCurrentPassword,getCurrentUser,updateUserDetails,updateAvatar}
